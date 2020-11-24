@@ -1,25 +1,29 @@
+'''
+This implementation of Couette flow considers the 
+imposition of periodic boundary conditions on left and right
+vertices of the problem rather than considering the flow as uni-directional
+'''
+
 from dolfin import *
 
 # Simulation constants
-theta = 0.01
+theta = 0.1
 dt = 0.05
 theta_ch = 0.5
 
-# Class for interfacing with the Newton solver
-# class NavierStokesEquation(NonlinearProblem):
-#     def __init__(self, a, L):
-#         NonlinearProblem.__init__(self)
-#         self.L = L
-#         self.a = a
+#Stuff for boundary conditions
+class PeriodicBoundary(SubDomain):
+    def inside(self, x, on_boundary):
+        return on_boundary and (near(x[0], 0.0))
 
-#     def F(self, b, x):
-#         assemble(self.L, tensor=b)
+    # Map RightBoundary to LeftBoundary
+    def map(self, x, y):
+        y[0] = x[0] - 1.0
+        y[1] = x[1]
 
-#     def J(self, A, x):
-#         assemble(self.a, tensor=A)
 
 # Define a simple mesh
-N = 10
+N = 5
 mesh = UnitSquareMesh(N,N)
 
 # Define Taylor-Hood Elements
@@ -30,7 +34,23 @@ F2 = VectorElement("P", mesh.ufl_cell(), 2)
 
 #Mixed finite element and function space
 ME = MixedElement([F2,F1])
-NS = FunctionSpace(mesh,ME)
+NS = FunctionSpace(mesh,ME, constrained_domain=PeriodicBoundary())
+
+#Dirichlet Boundary Conditions
+def top(x, on_boundary):
+    return x[1] > 1.0 - DOLFIN_EPS
+
+def bottom(x, on_boundary):
+    return x[1] < DOLFIN_EPS
+
+lid_velocity = (1.0, 0.0)
+
+fixed_wall_velocity = (0.0,0.0)
+
+boundary_conditions = [
+    DirichletBC(NS.sub(0), lid_velocity, top),
+    DirichletBC(NS.sub(0), fixed_wall_velocity, bottom)
+]
 
 #Create test functions
 psi_u, psi_p = TestFunctions(NS)
@@ -62,42 +82,6 @@ F = (F_mom + F_mass)*dx
 # Compute Jacobian
 J = derivative(F,w)
 
-# Boundary Conditions
-# Apply all Dirichlet BCs. u_x = 1 at the top and zero elsewhere
-
-#Define boundaries
-def right(x, on_boundary):
-    return x[0] > (1.0 - DOLFIN_EPS)
-
-def left(x,on_boundary):
-    return x[0] < DOLFIN_EPS
-
-def top(x, on_boundary):
-    return x[1] > 1.0 - DOLFIN_EPS
-
-def bottom(x, on_boundary):
-    return x[1] < DOLFIN_EPS
-
-lid_velocity = (1.0, 0.0)
-
-fixed_wall_velocity = (0.0,0.0)
-
-
-boundary_conditions = [
-    DirichletBC(NS.sub(0), lid_velocity, top),
-    DirichletBC(NS.sub(0), fixed_wall_velocity, bottom),
-    DirichletBC(NS.sub(0), fixed_wall_velocity, left),
-    DirichletBC(NS.sub(0), fixed_wall_velocity, right)
-]
-
-#Build solver
-# problem = NavierStokesEquation(J,F)
-# # problem = NonLinearVariationalProblem(F,w,boundary_conditions, J)
-# solver = NewtonSolver()
-# solver.parameters["linear_solver"] = "lu"
-# solver.parameters["convergence_criterion"] = "incremental"
-# solver.parameters["relative_tolerance"] = 1e-6
-
 problem = NonlinearVariationalProblem(F,w,boundary_conditions,J)
 solver = NonlinearVariationalSolver(problem)
 solver.parameters["newton_solver"]["linear_solver"] = "lu"
@@ -115,17 +99,18 @@ file_b << (w.split()[1],t)
 
 u,p = w.split()
 
-while t < 2.0:
+while t < 20.0:
 
     #Update timestep and t
     timestep +=1
     t += dt
+    print(t)
     #Update
     w_old.vector()[:] = w.vector()
     #Solve
     solver.solve()
     
     #Output every 10th timestep
-    if timestep %10 == 0:
+    if timestep %20 == 0:
         file_a << (w.split()[0],t)
         file_b << (w.split()[1],t)
