@@ -26,9 +26,9 @@ NOISE_MAGNITUDE = 0.03
 # Time and space parameters
 TIME_MAX = 100
 DT = 0.005
-N_CELLS = 20
-DOMAIN_LENGTH = 10.0
-theta_ch = 0.5
+N_CELLS = 40
+DOMAIN_LENGTH = 40.0
+theta_ch = 1.0
 #Viscosity Ratio and fluid params
 etaP_etaS = 1
 Pe = 1e-1
@@ -86,7 +86,7 @@ NS = FunctionSpace(mesh,NS_ME, constrained_domain=PeriodicBoundary())
 
 #Impose Dirichlet BC
 def top(x, on_boundary):
-    return x[1] > DOMAIN_LENGTH - 5*DOLFIN_EPS
+    return x[1] > DOMAIN_LENGTH - 20*DOLFIN_EPS
 
 def bottom(x, on_boundary):
     return x[1] < DOLFIN_EPS
@@ -238,7 +238,7 @@ CH_solver.parameters["newton_solver"]["relative_tolerance"] = 1e-6
 NS_problem = NonlinearVariationalProblem(F_NS, w, bcs, J=J_NS) 
 NS_solver = NonlinearVariationalSolver(NS_problem) 
 NS_solver.parameters["newton_solver"]["linear_solver"] = "mumps"
-# NS_solver.parameters["newton_solver"]["preconditioner"] = "icc"
+# NS_solver.parameters["newton_solver"]["preconditioner"] = "hypre_amg"
 NS_solver.parameters["newton_solver"]["relative_tolerance"] = 1e-6
 
 # Output file
@@ -266,7 +266,7 @@ while t < TIME_MAX:
     w0.vector()[:] = w.vector()
     NS_solver.solve()
     
-    if timestep % 1 == 0:
+    if timestep % 50 == 0:
         file_a << (ch.split()[0], t)
         file_b << (ch.split()[1], t)
 
