@@ -24,7 +24,8 @@ class PeriodicBoundary(SubDomain):
 
 # Define a simple mesh
 N = 5
-mesh = UnitSquareMesh(N,N)
+# mesh = UnitSquareMesh(N,N)
+mesh = RectangleMesh(Point(0.0, 0.0), Point(1.0, 1.0), N, N)
 
 # Define Taylor-Hood Elements
 # First order finite element for pressure

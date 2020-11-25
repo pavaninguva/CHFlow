@@ -1,38 +1,34 @@
-import random
 from dolfin import *
+import random
 import numpy as np
-
 
 #Simulation and material parameters to be specified
 
 # Flory-Huggins interaction parameters
-chi_AB = 0.006
-chi_AC = 0.006
-chi_BC = 0.006
+chi_AB = 0.06
+chi_AC = 0.06
+chi_BC = 0.06
 # Diffusion coefficient
 D_AB = 1.e-11
 D_AC = 1.e-11
 D_BC = 1.e-11
 # Chain length
-N_A = 1000
-N_B = 1000
-N_C = 1000
+N_A = 100
+N_B = 100
+N_C = 100
 # Scaling choices 
 N_SCALE_OPTION = "N_A"
-D_SCALE_OPTION = "D_AC"
+D_SCALE_OPTION = "D_AB"
 # Concentration parameters
-A_RAW = 0.3
-B_RAW = 0.3
+A_RAW = 0.1
+B_RAW = 0.1
 NOISE_MAGNITUDE = 0.03
 # Time and space parameters
-TIME_MAX = 400
-DT = 0.5
-N_CELLS = 99
+TIME_MAX = 100
+DT = 0.01
+N_CELLS = 50
 DOMAIN_LENGTH = 40
-theta_ch = 1
-
-
-
+theta_ch = 1.0
 
 # Class representing the intial conditions
 class InitialConditions(UserExpression):
@@ -50,19 +46,15 @@ class InitialConditions(UserExpression):
     def value_shape(self):
         return (5,)
 
+#Stuff for boundary conditions
+class PeriodicBoundary(SubDomain):
+    def inside(self, x, on_boundary):
+        return on_boundary and (near(x[0], 0.0))
 
-# Class for interfacing with the Newton solver
-class CahnHilliardEquation(NonlinearProblem):
-    def __init__(self, a, L):
-        NonlinearProblem.__init__(self)
-        self.L = L
-        self.a = a
-
-    def F(self, b, x):
-        assemble(self.L, tensor=b)
-
-    def J(self, A, x):
-        assemble(self.a, tensor=A)
+    # Map RightBoundary to LeftBoundary
+    def map(self, x, y):
+        y[0] = x[0] - DOMAIN_LENGTH
+        y[1] = x[1]
 
 
 # Form compiler options
@@ -70,19 +62,14 @@ parameters["form_compiler"]["optimize"] = True
 parameters["form_compiler"]["cpp_optimize"] = True
 
 # Create mesh and build function space
-
 mesh = RectangleMesh(
     Point(0.0, 0.0), Point(DOMAIN_LENGTH, DOMAIN_LENGTH), N_CELLS, N_CELLS
 )
 
 P1 = FiniteElement("Lagrange", mesh.ufl_cell(), 1)
-
 ME = MixedElement([P1,P1,P1,P1,P1])
+CH = FunctionSpace(mesh, ME, constrained_domain=PeriodicBoundary())
 
-CH = FunctionSpace(mesh, ME)
-
-# Define trial and test functions
-dch = TrialFunction(CH)
 h_1, h_2, j_1, j_2, j_3 = TestFunctions(CH)
 
 ch = Function(CH)
@@ -105,9 +92,9 @@ N_SCALE = N_scale_options[N_SCALE_OPTION]
 D_scale_options = {"D_AB": D_AB, "D_AC": D_AC, "D_BC": D_BC}
 D_SCALE = D_scale_options[D_SCALE_OPTION]
 
-kappa_AA = (1.0 / 3.0) * chi_AC
+kappa_AA = (1.0 / 3.0) * chi_AB
 kappa_BB = (1.0 / 3.0) * chi_BC
-kappa_AB = (1.0 / 6.0) * (chi_AC +  chi_BC - 2.0 * chi_AB)
+kappa_AB = (1.0 / 3.0) * (chi_AC +  chi_BC - 2.0 * chi_AB)
 
 N_kappa_AA = N_SCALE * kappa_AA
 N_kappa_BB = N_SCALE * kappa_BB
@@ -133,61 +120,57 @@ D_AB_ = D_AB / D_SCALE
 D_AC_ = D_AC / D_SCALE
 D_BC_ = D_BC / D_SCALE
 
-
 dt = DT
 
 # transport equations
 F_a = (
-    a * h_1 * dx
-    - a0 * h_1 * dx
-    + dt * a * b * D_AB_ * dot(grad(N_mu_AB_mid), grad(h_1)) * dx
-    + dt * a * (1.0 - a - b) * D_AC_ * dot(grad(N_mu_AC_mid), grad(h_1)) * dx
+    a * h_1 
+    - a0 * h_1
+    + dt * a * b * D_AB_ * dot(grad(N_mu_AB_mid), grad(h_1)) 
+    + dt * a * (1.0 - a - b) * D_AC_ * dot(grad(N_mu_AC_mid), grad(h_1)) 
 )
 
 F_b = (
-    b * h_2 * dx
-    - b0 * h_2 * dx
-    - dt * a * b * D_AB_ * dot(grad(N_mu_AB_mid), grad(h_2)) * dx
-    + dt * b * (1.0 - a - b) * D_BC_ * dot(grad(N_mu_BC_mid), grad(h_2)) * dx
+    b * h_2 
+    - b0 * h_2 
+    - dt * a * b * D_AB_ * dot(grad(N_mu_AB_mid), grad(h_2)) 
+    + dt * b * (1.0 - a - b) * D_BC_ * dot(grad(N_mu_BC_mid), grad(h_2)) 
 )
 
 # chemical potential equations
 F_N_mu_AB = (
-    N_mu_AB * j_1 * dx
-    - N_dgda * j_1 * dx
-    + N_dgdb * j_1 * dx
-    - (N_kappa_AA - N_kappa_AB) * dot(grad(a), grad(j_1)) * dx
-    + (N_kappa_BB - N_kappa_AB) * dot(grad(b), grad(j_1)) * dx
+    N_mu_AB * j_1 
+    - N_dgda * j_1 
+    + N_dgdb * j_1 
+    - (N_kappa_AA - N_kappa_AB) * dot(grad(a), grad(j_1)) 
+    + (N_kappa_BB - N_kappa_AB) * dot(grad(b), grad(j_1)) 
 )
 
 F_N_mu_AC = (
-    N_mu_AC * j_2 * dx
-    - N_dgda * j_2 * dx
-    + N_dgdc * j_2 * dx
-    - (N_kappa_AA * dot(grad(a), grad(j_2))) * dx
-    - (N_kappa_AB * dot(grad(b), grad(j_2))) * dx(domain=mesh)
+    N_mu_AC * j_2 
+    - N_dgda * j_2 
+    + N_dgdc * j_2 
+    - (N_kappa_AA * dot(grad(a), grad(j_2))) 
+    - (N_kappa_AB * dot(grad(b), grad(j_2))) 
 )
 
 F_N_mu_BC = (
-    N_mu_BC * j_3 * dx
-    - N_dgdb * j_3 * dx
-    + N_dgdc * j_3 * dx
-    - N_kappa_BB * dot(grad(b), grad(j_3)) * dx
-    - N_kappa_AB * dot(grad(a), grad(j_3)) * dx(domain=mesh)
+    N_mu_BC * j_3
+    - N_dgdb * j_3
+    + N_dgdc * j_3 
+    - N_kappa_BB * dot(grad(b), grad(j_3))
+    - N_kappa_AB * dot(grad(a), grad(j_3)) 
 )
 
-F = F_a + F_b + F_N_mu_AB + F_N_mu_AC + F_N_mu_BC
+F = (F_a + F_b + F_N_mu_AB + F_N_mu_AC + F_N_mu_BC)*dx(domain=mesh)
 
-# Compute directional derivative about u in the direction of du (Jacobian)
-a = derivative(F, ch, dch)
+# Compute Jacobian
+J = derivative(F,ch)
 
-# # Create nonlinear problem and Newton solver
-problem = CahnHilliardEquation(a, F)
-
-solver = NewtonSolver()
-solver.parameters["linear_solver"] = "lu"
-solver.parameters["convergence_criterion"] = "incremental"
-solver.parameters["relative_tolerance"] = 1e-6
+#Set up problem and solver
+problem = NonlinearVariationalProblem(F,ch, J=J)
+solver = NonlinearVariationalSolver(problem)
+solver.parameters["newton_solver"]["linear_solver"] = "lu"
 
 # Output file
 file_a = File("concentration_A.pvd", "compressed")
@@ -208,8 +191,9 @@ while t < TIME_MAX:
     t += dt
 
     ch0.vector()[:] = ch.vector()
-    solver.solve(problem, ch.vector())
+    solver.solve()
     
-    if timestep % 10 == 0:
+    if timestep % 500 == 0:
         file_a << (ch.split()[0], t)
         file_b << (ch.split()[1], t)
+
