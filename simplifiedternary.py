@@ -5,13 +5,13 @@ import numpy as np
 #Simulation and material parameters to be specified
 
 # Flory-Huggins interaction parameters
-chi_AB = 0.06
-chi_AC = 0.06
-chi_BC = 0.06
+chi_AB = 0.15
+chi_AC = 0.15
+chi_BC = 0.15
 # Diffusion coefficient
-D_AB = 1.e-11
-D_AC = 1.e-11
-D_BC = 1.e-11
+D_AB = 1.e-10
+D_AC = 1.e-10
+D_BC = 1.e-10
 # Chain length
 N_A = 100
 N_B = 100
@@ -24,10 +24,10 @@ A_RAW = 0.1
 B_RAW = 0.1
 NOISE_MAGNITUDE = 0.03
 # Time and space parameters
-TIME_MAX = 100
-DT = 0.01
-N_CELLS = 50
-DOMAIN_LENGTH = 40
+TIME_MAX = 200
+DT = 0.1
+N_CELLS = 30
+DOMAIN_LENGTH = 400
 theta_ch = 1.0
 
 # Class representing the intial conditions
@@ -92,9 +92,9 @@ N_SCALE = N_scale_options[N_SCALE_OPTION]
 D_scale_options = {"D_AB": D_AB, "D_AC": D_AC, "D_BC": D_BC}
 D_SCALE = D_scale_options[D_SCALE_OPTION]
 
-kappa_AA = (1.0 / 3.0) * chi_AB
-kappa_BB = (1.0 / 3.0) * chi_BC
-kappa_AB = (1.0 / 3.0) * (chi_AC +  chi_BC - 2.0 * chi_AB)
+kappa_AA = (2.0 / 3.0) * chi_AC
+kappa_BB = (2.0 / 3.0) * chi_BC
+kappa_AB = (1.0 / 3.0) * (chi_AC +  chi_BC - 1.0 * chi_AB)
 
 N_kappa_AA = N_SCALE * kappa_AA
 N_kappa_BB = N_SCALE * kappa_BB
@@ -171,6 +171,7 @@ J = derivative(F,ch)
 problem = NonlinearVariationalProblem(F,ch, J=J)
 solver = NonlinearVariationalSolver(problem)
 solver.parameters["newton_solver"]["linear_solver"] = "lu"
+solver.parameters["newton_solver"]["relaxation_parameter"] = 0.5
 
 # Output file
 file_a = File("concentration_A.pvd", "compressed")
@@ -193,7 +194,7 @@ while t < TIME_MAX:
     ch0.vector()[:] = ch.vector()
     solver.solve()
     
-    if timestep % 500 == 0:
+    if timestep % 100 == 0:
         file_a << (ch.split()[0], t)
         file_b << (ch.split()[1], t)
 

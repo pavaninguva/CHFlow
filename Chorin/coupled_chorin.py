@@ -205,7 +205,15 @@ F_N_mu_BC = (
     - N_kappa_AB * dot(grad(a), grad(j_3)) 
 )
 
-#Navier Stokes
+#Navier Stokes Using Chorins Method
+
+"""
+Chorins method consists of three steps: 
+
+1. Compute the tentative velocity 
+
+"""
+
 F_mom = (Constant(1/dt)*dot(u-u0, psi_u)
         # Viscous term
         + Constant(N_SCALE)*Constant(Sc)*Constant(theta_ch)*Constant(2.0)*inner(theta*sym(grad(u)), sym(grad(psi_u)))
@@ -269,4 +277,3 @@ while t < TIME_MAX:
     if timestep % 50 == 0:
         file_a << (ch.split()[0], t)
         file_b << (ch.split()[1], t)
-
